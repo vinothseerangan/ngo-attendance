@@ -15,8 +15,8 @@ GID_LOG = "761431643"
 
 def load_data(gid_number):
     try:
-        # PURE HARDCODED LINK STRIP - NO SECRET DEPENDENCIES
-        url = f"https://google.com{gid_number}"
+        # 🔒 FIXED PERMANENT EXPORT LINK GATEWAY
+        url = f"https://google.com{SHEET_ID}/export?format=csv&gid={gid_number}"
         
         response = requests.get(url, timeout=10)
         st.session_state[f"status_code_{gid_number}"] = response.status_code
