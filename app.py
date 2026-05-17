@@ -10,11 +10,12 @@ SCRIPT_URL = "https://google.com"
 
 def load_data(tab_name):
     try:
-        # BULLETPROOF PUBLIC URL EXPORT FORMAT
-        url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&sheet={tab_name}"
+        url = f"https://google.com{SHEET_ID}/export?format=csv&sheet={tab_name}"
         df = pd.read_csv(url)
-        # Force completely clean lowercase headers to avoid mismatch errors
-        df.columns = df.columns.str.strip().str.lower()
+        
+        # FAILSAFE: Strip invisible spaces and force lowercase on column names
+        df.columns = df.columns.astype(str).str.strip().str.lower()
+        
         return df
     except Exception as e:
         st.error(f"Error loading {tab_name} data. Please ensure 'Publish to the Web' is enabled in your Google Sheet (File > Share > Publish to the Web).")
@@ -40,15 +41,25 @@ if not st.session_state.logged_in:
     if st.button("Log In"):
         users_df = load_data("Users")
         if not users_df.empty:
-            # Match credentials cleanly
-            user_row = users_df[(users_df['email'].astype(str) == email_input.strip()) & (users_df['password'].astype(str) == password_input.strip())]
-            if not user_row.empty:
-                st.session_state.logged_in = True
-                st.session_state.email = email_input
-                st.session_state.role = str(user_row.iloc[0]['role']).strip()
-                st.rerun()
+            # Clean up user inputs for strict matching
+            clean_email = email_input.strip().lower()
+            clean_pwd = password_input.strip()
+            
+            # Double check column existence safely
+            if 'email' in users_df.columns and 'password' in users_df.columns:
+                users_df['email'] = users_df['email'].astype(str).str.strip().str.lower()
+                users_df['password'] = users_df['password'].astype(str).str.strip()
+                
+                user_row = users_df[(users_df['email'] == clean_email) & (users_df['password'] == clean_pwd)]
+                if not user_row.empty:
+                    st.session_state.logged_in = True
+                    st.session_state.email = email_input.strip()
+                    st.session_state.role = str(user_row.iloc[0]['role']).strip()
+                    st.rerun()
+                else:
+                    st.error("Invalid Email or Password. Please check your credentials in the Google Sheet.")
             else:
-                st.error("Invalid Email or Password. Please check your credentials in the Google Sheet.")
+                st.error(f"Column mismatch! Found headers: {list(users_df.columns)}. Expected: email, password, role")
         else:
             st.error("Could not parse data from the 'Users' tab. Please check your row headers.")
 else:
@@ -87,7 +98,9 @@ else:
         st.header(f"Roster for {selected_batch}")
 
         if not students_df.empty and 'student_name' in students_df.columns:
-            filtered_students = students_df[students_df['batch'].astype(str) == str(selected_batch)]['student_name'].tolist()
+            # Force string matching to avoid type errors
+            students_df['batch'] = students_df['batch'].astype(str).str.strip()
+            filtered_students = students_df[students_df['batch'] == str(selected_batch).strip()]['student_name'].tolist()
         else:
             filtered_students = []
 
@@ -129,7 +142,7 @@ else:
     elif menu == "Admin Sheet Link":
         st.header("Admin Management")
         st.write("As an Admin, click below to add new students, update teacher passwords, or add batches:")
-        st.markdown(f"[👉 Open Google Spreadsheet Database](https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit)")
+        st.markdown(f"[👉 Open Google Spreadsheet Database](https://google.com{SHEET_ID}/edit)")
 
     # --- ANALYTICS ---
     elif menu == "Absenteeism Analytics":
