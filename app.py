@@ -4,26 +4,20 @@ import datetime
 import requests
 import json
 
-# --- CONFIGURATION ---
-SHEET_ID = "1p8GUD8x3CIy4X5u2t-TDCHPkqoGCn4DgCYTtiWq75E8"
+# --- GOOGLE SHEET CONFIGURATION ---
+# Your unique public published ID taken directly from your 2PACX link
+PUBLISHED_ID = "2PACX-1vRD_DZFeFRkKopWC7TQ3jQqLc_BzTIvlWrg1dwK9ZyKAiQLTDkWmMNvxn-sEoG1LytmWznR1pVtcM2P"
 SCRIPT_URL = "https://google.com"
 
 def load_data(tab_name):
     try:
-        # ALTERNATIVE ROBUST CSV EXPORT METHOD
-        url = f"https://google.com{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={tab_name}"
+        # BULLETPROOF RE-ROUTING LINK FOR PUBLISHED SHEETS
+        url = f"https://docs.google.com/spreadsheets/d/e/{PUBLISHED_ID}/pub?output=csv&sheet={tab_name}"
         df = pd.read_csv(url)
         df.columns = df.columns.astype(str).str.strip().str.lower()
         return df
     except Exception as e:
-        # BACKUP EXPORT METHOD IF GVIZ FAILS
-        try:
-            url = f"https://google.com{SHEET_ID}/export?format=csv&sheet={tab_name}"
-            df = pd.read_csv(url)
-            df.columns = df.columns.astype(str).str.strip().str.lower()
-            return df
-        except:
-            return pd.DataFrame()
+        return pd.DataFrame()
 
 # Initialize Session States
 if "logged_in" not in st.session_state:
@@ -56,29 +50,28 @@ if not st.session_state.logged_in:
                 if not user_row.empty:
                     st.session_state.logged_in = True
                     st.session_state.email = email_input.strip()
-                    st.session_state.role = str(user_row.iloc[0]['role']).strip()
+                    st.session_state.role = str(user_row.iloc['role']).strip()
                     st.rerun()
                 else:
                     st.error("Invalid Email or Password. Please check your credentials in the Google Sheet.")
             else:
-                st.error(f"Column mismatch! Found headers: {list(users_df.columns)}. Expected columns: email, password, role")
+                st.error(f"Column mismatch! Found headers: {list(users_df.columns)}. Expected: email, password, role")
         else:
-            st.error("Could not parse data from the 'Users' tab. Please check your sheet visibility.")
+            st.error("Could not parse data from the 'Users' tab. Wait a few seconds and try clicking Log In again.")
 
-    # --- DIAGNOSTIC PANEL TO HELP YOU SEE WHAT IS WRONG ---
+    # --- CONNECTION DEBUG PANEL ---
     st.write("---")
-    with st.expander("🛠️ Connection Debug Panel (Click here to check sheet status)"):
-        st.write("Testing connection to your Google Sheet...")
+    with st.expander("🛠️ Connection Debug Panel"):
+        st.write("Testing connection to your published Google Sheet...")
         test_df = load_data("Users")
         if not test_df.empty:
-            st.success("✅ Connection Successful! The app can see your 'Users' tab.")
-            st.write("Here are the column names the app detected in your Row 1:")
+            st.success("✅ Connection Successful! Streamlit can see your 'Users' tab online.")
+            st.write("Headers found in Row 1:")
             st.code(list(test_df.columns))
-            st.write("Sample data layout (Passwords are hidden):")
+            st.write("Data rows read:")
             st.dataframe(test_df[['email', 'role']].head(3))
         else:
-            st.error("❌ Connection Failed. Streamlit cannot download your spreadsheet tabs.")
-            st.info("Please confirm that 'Anyone with link can Edit' is fully saved under the blue Share button in your Google Sheet.")
+            st.error("❌ Link connection pending. Please verify your tab name is spelled exactly 'Users' with no spaces.")
 
 else:
     # --- LOGGED IN APP ---
@@ -157,7 +150,7 @@ else:
     elif menu == "Admin Sheet Link":
         st.header("Admin Management")
         st.write("As an Admin, click below to add new students, update teacher passwords, or add batches:")
-        st.markdown(f"[👉 Open Google Spreadsheet Database](https://google.com{SHEET_ID}/edit)")
+        st.markdown("f\"[👉 Open Google Spreadsheet Database](https://google.com)\"")
 
     # --- ANALYTICS ---
     elif menu == "Absenteeism Analytics":
