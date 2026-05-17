@@ -6,6 +6,7 @@ import json
 from io import StringIO
 
 # --- CONFIGURATION ---
+SHEET_ID = "1p8GUD8x3CIy4X5u2t-TDCHPkqoGCn4DgCYTtiWq75E8"
 SCRIPT_URL = "https://google.com"
 
 GID_USERS = "1184024919"
@@ -14,12 +15,8 @@ GID_LOG = "761431643"
 
 def load_data(gid_number):
     try:
-        # 🔑 SECURE BYPASS: Checking if the dynamic dashboard link is injected
-        if "CORRECT_URL" in st.secrets:
-            url = f"{st.secrets['CORRECT_URL']}&gid={gid_number}"
-        else:
-            # Hardcoded bulletproof emergency fallback link
-            url = f"https://google.com{gid_number}"
+        # PURE HARDCODED LINK STRIP - NO SECRET DEPENDENCIES
+        url = f"https://google.com{gid_number}"
         
         response = requests.get(url, timeout=10)
         st.session_state[f"status_code_{gid_number}"] = response.status_code
@@ -195,7 +192,7 @@ else:
     elif menu == "Admin Sheet Link":
         st.header("Admin Management")
         st.write("As an Admin, click below to add new students, update teacher passwords, or add batches:")
-        st.markdown(f"[👉 Open Google Spreadsheet Database](https://google.com)")
+        st.markdown(f"[👉 Open Google Spreadsheet Database](https://google.com{SHEET_ID}/edit)")
 
     # --- ANALYTICS ---
     elif menu == "Absenteeism Analytics":
