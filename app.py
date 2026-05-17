@@ -1,4 +1,4 @@
-# streamlit_app_live_checkboxes.py
+# streamlit_app_final.py
 import streamlit as st
 import pandas as pd
 import datetime
@@ -9,9 +9,10 @@ import re
 from io import StringIO
 from typing import Dict
 
-# --- CONFIGURATION (update these) ---
+# --- CONFIGURATION (update these if needed) ---
 SHEET_ID = "1p8GUD8x3CIy4X5u2t-TDCHPkqoGCn4DgCYTtiWq75E8"
-SCRIPT_URL = "https://script.google.com/macros/s/your-script-id/exec"  # <-- replace with your Apps Script URL
+# Your deployed Apps Script web app URL (user-provided)
+SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwgnCnsIrvyHY1bA9Tb3hIZpQykxqcOXYOVMNaes9y1-bPtgesf2s2-m6PweT15sZZSFQ/exec"
 
 GID_USERS = "1184024919"
 GID_STUDENTS = "0"
@@ -19,6 +20,10 @@ GID_LOG = "761431643"
 
 # --- SAFE RERUN HELPER ---
 def safe_rerun():
+    """
+    Try to call Streamlit's experimental rerun. If missing, fall back to toggling
+    a query param or setting a session_state marker to force a refresh.
+    """
     try:
         st.experimental_rerun()
     except Exception:
@@ -51,6 +56,10 @@ def http_get_with_retries(url: str, timeout: int = 10, retries: int = 2, backoff
 
 @st.cache_data(ttl=300)
 def fetch_csv_from_sheet(gid_number: str) -> Dict:
+    """
+    Returns a dict with keys: df (DataFrame or empty), status_code, response_text, url
+    Cached for 5 minutes to reduce repeated calls while developing.
+    """
     url = build_sheet_export_url(SHEET_ID, gid_number)
     try:
         resp = http_get_with_retries(url, timeout=10, retries=2, backoff=1.0)
@@ -67,6 +76,10 @@ def fetch_csv_from_sheet(gid_number: str) -> Dict:
 
 # --- UTILITIES ---
 def slugify_key(s: str) -> str:
+    """
+    Convert a string into a safe session_state key fragment.
+    Keeps letters, numbers and underscores. Lowercase.
+    """
     if s is None:
         return "unknown"
     s = str(s).strip().lower()
@@ -76,6 +89,10 @@ def slugify_key(s: str) -> str:
     return s or "unknown"
 
 def unique_keys(names):
+    """
+    Given a list of names, return a dict mapping original name -> unique slug key.
+    Handles duplicates by appending an index.
+    """
     counts = {}
     mapping = {}
     for name in names:
@@ -129,6 +146,7 @@ if not st.session_state.logged_in:
                     st.session_state.logged_in = True
                     st.session_state.email = clean_email
 
+                    # Safely extract single role value
                     if 'role' in user_row.columns and len(user_row) > 0:
                         role_value = user_row['role'].iloc[0]
                     else:
@@ -145,6 +163,7 @@ if not st.session_state.logged_in:
         else:
             st.error("Unable to read Users sheet. Open the Connection Debug Panel for details.")
 
+    # --- CONNECTION DEBUG PANEL ---
     st.write("---")
     with st.expander("🛠️ Connection Debug Panel"):
         st.write("Testing connection to your 'Users' sheet tab...")
@@ -165,31 +184,37 @@ if not st.session_state.logged_in:
             st.code(result.get("url", "No URL built yet"))
 
 else:
+    # --- LOGGED IN APP ---
     display_role = st.session_state.role.title() if st.session_state.role else "Teacher"
     st.sidebar.write(f"Logged in as: **{st.session_state.email}** ({display_role})")
 
+    # Debug toggle for admins
     if "admin" in st.session_state.role.lower():
         st.sidebar.checkbox("Debug Mode", value=st.session_state.debug_mode, key="debug_mode")
     if st.sidebar.button("Log Out"):
-        keys_to_clear = [k for k in st.session_state.keys() if k.startswith("check_") or k.startswith("debug_url_") or k in ("logged_in","email","role","last_payload")]
+        # clear only relevant keys
+        keys_to_clear = [k for k in list(st.session_state.keys()) if k.startswith("check_") or k.startswith("debug_url_") or k in ("logged_in","email","role","last_payload")]
         for k in keys_to_clear:
-            del st.session_state[k]
+            if k in st.session_state:
+                del st.session_state[k]
         st.session_state.logged_in = False
         safe_rerun()
 
+    # Load students
     students_result = fetch_csv_from_sheet(GID_STUDENTS)
     students_df = students_result["df"]
     st.session_state[f"debug_url_{GID_STUDENTS}"] = students_result["url"]
     st.session_state[f"status_code_{GID_STUDENTS}"] = students_result["status_code"]
     st.session_state[f"response_text_{GID_STUDENTS}"] = students_result["response_text"]
 
+    # Navigation
     if "admin" in st.session_state.role.lower():
         menu = st.sidebar.selectbox("Navigation", ["Take Attendance", "Admin Sheet Link", "Absenteeism Analytics"])
     else:
         menu = "Take Attendance"
         st.sidebar.info("Teacher Panel: Profile edits are locked.")
 
-    # --- TAKE ATTENDANCE (LIVE CHECKBOXES, no st.form) ---
+    # --- TAKE ATTENDANCE (LIVE CHECKBOXES) ---
     if menu == "Take Attendance":
         st.header("Session Setup")
 
@@ -204,8 +229,9 @@ else:
             selected_batch = st.selectbox("Select Batch", available_batches)
             selected_subject = st.selectbox("Select Subject", ["Math", "English", "Science", "Computers"])
         with col2:
+            # Use logged-in email as default teacher name
             selected_date = st.date_input("Date", datetime.date.today())
-            selected_teacher = st.text_input("Incharge Teacher Name", value=st.session_state.email)
+            selected_teacher = st.text_input("Incharge Teacher Name", value=st.session_state.get("email", ""))
 
         st.write("---")
         st.header(f"Roster for {selected_batch}")
@@ -244,8 +270,7 @@ else:
 
                 left_col, right_col = st.columns([3,1])
                 with left_col:
-                    # checkbox returns the current value but we bind it to session_state key
-                    current = st.checkbox(student, value=st.session_state.get(key_name, True), key=key_name)
+                    _ = st.checkbox(student, value=st.session_state.get(key_name, True), key=key_name)
                 with right_col:
                     if st.session_state.get(key_name, False):
                         st.markdown("<div style='text-align:right'><span style='color:green; font-weight:bold; background-color:#e6f4ea; padding:6px 10px; border-radius:6px;'>🟢 PRESENT</span></div>", unsafe_allow_html=True)
@@ -271,15 +296,15 @@ else:
                     })
 
                 st.session_state.last_payload = payload
+
                 try:
-                    headers = {"Content-Type": "application/json"}
-                    resp = requests.post(SCRIPT_URL, data=json.dumps(payload), headers=headers, timeout=10)
+                    resp = requests.post(SCRIPT_URL, json=payload, timeout=15)
                     if resp.status_code == 200:
                         st.success("🎉 Attendance logged successfully into your Google Sheet!")
                     else:
                         st.error(f"Spreadsheet error (Status Code: {resp.status_code})")
                         if st.session_state.debug_mode:
-                            st.code(resp.text[:1000])
+                            st.code(resp.text[:2000])
                 except Exception as e:
                     st.error("Connection Error: Check your Apps Script Link configuration and network.")
                     if st.session_state.debug_mode:
