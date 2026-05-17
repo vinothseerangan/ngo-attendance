@@ -15,8 +15,7 @@ GID_LOG = "761431643"
 
 def load_data(gid_number):
     try:
-        # Strict URL targeting using your exact tab GID numbers
-        url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={gid_number}"
+        url = f"https://google.com{SHEET_ID}/export?format=csv&gid={gid_number}"
         df = pd.read_csv(url)
         df.columns = df.columns.astype(str).str.strip().str.lower()
         return df
@@ -54,7 +53,8 @@ if not st.session_state.logged_in:
                 if not user_row.empty:
                     st.session_state.logged_in = True
                     st.session_state.email = email_input.strip()
-                    st.session_state.role = str(user_row.iloc['role']).strip()
+                    # FIXED THE KEY ERROR ON THIS LINE:
+                    st.session_state.role = str(user_row.iloc[0]['role']).strip()
                     st.rerun()
                 else:
                     st.error("Invalid Email or Password. Please check your credentials in the Google Sheet.")
@@ -154,7 +154,7 @@ else:
     elif menu == "Admin Sheet Link":
         st.header("Admin Management")
         st.write("As an Admin, click below to add new students, update teacher passwords, or add batches:")
-        st.markdown(f"[👉 Open Google Spreadsheet Database](https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit)")
+        st.markdown(f"[👉 Open Google Spreadsheet Database](https://google.com{SHEET_ID}/edit)")
 
     # --- ANALYTICS ---
     elif menu == "Absenteeism Analytics":
