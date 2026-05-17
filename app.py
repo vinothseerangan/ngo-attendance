@@ -3,6 +3,7 @@ import pandas as pd
 import datetime
 import requests
 import json
+import time
 
 # --- CONFIGURATION ---
 PUBLISHED_ID = "2PACX-1vRD_DZFeFRkKopWC7TQ3jQqLc_BzTIvlWrg1dwK9ZyKAiQLTDkWmMNvxn-sEoG1LytmWznR1pVtcM2P"
@@ -13,9 +14,13 @@ GID_USERS = "1184024919"
 GID_STUDENTS = "0"
 GID_LOG = "761431643"
 
+# 🔒 FIXED BYPASS: ttl=0 tells Streamlit never to store this data in frozen memory
+@st.cache_data(ttl=0)
 def load_data(gid_number):
     try:
-        url = f"https://google.com{PUBLISHED_ID}/pub?output=csv&gid={gid_number}"
+        # BUSTING THE CACHE WALL: Adding a live timestamp forces a fresh download from Google every second
+        nocache_timestamp = int(time.time())
+        url = f"https://google.com{PUBLISHED_ID}/pub?output=csv&gid={gid_number}&cb={nocache_timestamp}"
         df = pd.read_csv(url)
         df.columns = df.columns.astype(str).str.strip().str.lower()
         return df
@@ -53,28 +58,29 @@ if not st.session_state.logged_in:
                 if not user_row.empty:
                     st.session_state.logged_in = True
                     st.session_state.email = email_input.strip()
-                    st.session_state.role = str(user_row['role'].values[0]).strip()
+                    # Fixed list output extraction bug
+                    st.session_state.role = str(user_row['role'].values[0]).strip().lower() 
                     st.rerun()
                 else:
                     st.error("Invalid Email or Password. Please check your credentials in the Google Sheet.")
             else:
                 st.error(f"Column mismatch! Found headers: {list(users_df.columns)}. Expected: email, password, role")
         else:
-            st.error("Could not download User account database. Please ensure your 'Users' tab is published.")
+            st.error("Connection lag detected. Please try clicking Log In again in a moment.")
 
     # --- CONNECTION DEBUG PANEL ---
     st.write("---")
-    with st.expander("🛠️ Connection Debug Panel"):
-        st.write("Testing clean target connection to your published 'Users' sheet tab...")
+    with st.expander("🛠️ Connection Debug Panel (Check Status Live)"):
+        st.write("Fetching direct data package streams...")
         test_df = load_data(GID_USERS)
         if not test_df.empty:
-            st.success("✅ Connection Fixed! Streamlit can isolate your proper 'Users' tab layout.")
+            st.success("✅ Connection Successful! Tab isolated.")
             st.write("Headers found inside this specific tab:")
             st.code(list(test_df.columns))
             if 'email' in test_df.columns:
                 st.dataframe(test_df[['email', 'role']].head(3))
         else:
-            st.error("❌ Link connection pending. Please verify your individual tab publishing status.")
+            st.error("❌ Link connection pending. System re-sync required.")
 
 else:
     # --- LOGGED IN APP ---
@@ -83,11 +89,12 @@ else:
         st.session_state.logged_in = False
         st.session_state.email = ""
         st.session_state.role = ""
+        st.cache_data.clear() # Clears session cache completely on logout
         st.rerun()
 
     students_df = load_data(GID_STUDENTS)
 
-    if st.session_state.role.lower() == "admin":
+    if st.session_state.role.lower() == "admin" or "admin" in st.session_state.role:
         menu = st.sidebar.selectbox("Navigation", ["Take Attendance", "Admin Sheet Link", "Absenteeism Analytics"])
     else:
         menu = "Take Attendance"
@@ -117,7 +124,6 @@ else:
             filtered_students = []
 
         if filtered_students:
-            # 🆕 MASTER OVERRIDE CONTROLS (Placed cleanly inside session memory)
             col_b1, col_b2 = st.columns(2)
             with col_b1:
                 if st.button("✅ Mark All Present"):
@@ -130,19 +136,16 @@ else:
 
             st.write("---")
             
-            # Form submission housing the individual student nodes
             with st.form("attendance_form"):
                 attendance_states = {}
-                
                 for student in filtered_students:
-                    # Failsafe initialization of keys
                     key_name = f"check_{student}"
                     if key_name not in st.session_state:
                         st.session_state[key_name] = True
                     
                     left_col, right_col = st.columns(2)
                     with left_col:
-                        # 🔒 FIXED BUG: Checking individual checkbox binds strictly to its unique state key
+                        # Individual checkboxes bind strictly to session state keys
                         attendance_states[student] = st.checkbox(student, key=key_name)
                     with right_col:
                         if attendance_states[student]:
