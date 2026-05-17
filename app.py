@@ -1,27 +1,57 @@
+# streamlit_app.py
 import streamlit as st
 import pandas as pd
 import datetime
 import requests
 import json
 from io import StringIO
+import time
 
 # --- CONFIGURATION ---
 SHEET_ID = "1p8GUD8x3CIy4X5u2t-TDCHPkqoGCn4DgCYTtiWq75E8"
-SCRIPT_URL = "https://google.com"
+# Replace with your actual Apps Script web app URL that accepts POSTs
+SCRIPT_URL = "https://script.google.com/macros/s/your-script-id/exec"
 
 GID_USERS = "1184024919"
 GID_STUDENTS = "0"
 GID_LOG = "761431643"
 
+# --- HELPERS ---
+def build_sheet_export_url(sheet_id: str, gid_number: str) -> str:
+    """
+    Construct a proper Google Sheets CSV export URL.
+    """
+    return f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid_number}"
+
+def http_get_with_retries(url: str, timeout: int = 10, retries: int = 2, backoff: float = 1.0):
+    """
+    Simple GET with retries for transient network issues.
+    Returns requests.Response or raises the last exception.
+    """
+    last_exc = None
+    for attempt in range(retries + 1):
+        try:
+            resp = requests.get(url, timeout=timeout)
+            return resp
+        except Exception as e:
+            last_exc = e
+            if attempt < retries:
+                time.sleep(backoff * (attempt + 1))
+            else:
+                raise
+    raise last_exc
+
 def load_data(gid_number):
     try:
-        # PURE DIRECT CONNECT LINK - ABSOLUTELY INDEPENDENT
-        url = f"https://google.com{SHEET_ID}/export?format=csv&gid={gid_number}"
-        response = requests.get(url, timeout=10)
-        
+        url = build_sheet_export_url(SHEET_ID, gid_number)
+        # store the last attempted URL for debugging
+        st.session_state[f"url_{gid_number}"] = url
+
+        response = http_get_with_retries(url, timeout=10, retries=2, backoff=1.0)
+
         st.session_state[f"status_code_{gid_number}"] = response.status_code
-        st.session_state[f"response_text_{gid_number}"] = response.text[:500] 
-        
+        st.session_state[f"response_text_{gid_number}"] = response.text[:500]
+
         if response.status_code == 200:
             df = pd.read_csv(StringIO(response.text))
             df.columns = df.columns.astype(str).str.strip().str.lower()
@@ -49,17 +79,17 @@ if not st.session_state.logged_in:
     st.subheader("Login")
     email_input = st.text_input("Email Address")
     password_input = st.text_input("Password", type="password")
-    
+
     if st.button("Log In"):
         users_df = load_data(GID_USERS)
         if not users_df.empty:
             clean_email = email_input.strip().lower()
             clean_pwd = password_input.strip()
-            
+
             if 'email' in users_df.columns and 'password' in users_df.columns:
                 users_df['email'] = users_df['email'].astype(str).str.strip().str.lower()
                 users_df['password'] = users_df['password'].astype(str).str.strip()
-                
+
                 user_row = users_df[(users_df['email'] == clean_email) & (users_df['password'] == clean_pwd)]
                 if not user_row.empty:
                     st.session_state.logged_in = True
@@ -86,10 +116,12 @@ if not st.session_state.logged_in:
                 st.dataframe(test_df[['email', 'role']].head(3))
         else:
             st.error("❌ Link connection pending. Click the diagnostics button below to re-verify.")
-        
+
         if st.button("🔍 Run Live Connection Diagnostics"):
             st.metric(label="Google Server Status Code", value=str(st.session_state.get(f"status_code_{GID_USERS}", "No data")))
             st.code(st.session_state.get(f"response_text_{GID_USERS}", "Empty response"))
+            st.write("Constructed URL:")
+            st.code(st.session_state.get(f"url_{GID_USERS}", "No URL built yet"))
 
 else:
     # --- LOGGED IN APP ---
@@ -111,9 +143,9 @@ else:
     # --- TAKE ATTENDANCE ---
     if menu == "Take Attendance":
         st.header("Session Setup")
-        
+
         available_batches = list(students_df['batch'].dropna().unique()) if not students_df.empty and 'batch' in students_df.columns else ["Batch A"]
-        
+
         col1, col2 = st.columns(2)
         with col1:
             selected_batch = st.selectbox("Select Batch", available_batches)
@@ -143,14 +175,14 @@ else:
                         st.session_state[f"check_{s}"] = False
 
             st.write("---")
-            
+
             with st.form("attendance_form"):
                 attendance_states = {}
                 for student in filtered_students:
                     key_name = f"check_{student}"
                     if key_name not in st.session_state:
                         st.session_state[key_name] = True
-                    
+
                     left_col, right_col = st.columns(2)
                     with left_col:
                         attendance_states[student] = st.checkbox(student, key=key_name)
@@ -159,10 +191,10 @@ else:
                             st.markdown("<span style='color:green; font-weight:bold; background-color:#e6f4ea; padding:4px 8px; border-radius:4px;'>🟢 PRESENT</span>", unsafe_allow_html=True)
                         else:
                             st.markdown("<span style='color:red; font-weight:bold; background-color:#fce8e6; padding:4px 8px; border-radius:4px;'>🔴 ABSENT</span>", unsafe_allow_html=True)
-                
+
                 st.write("")
                 submit_btn = st.form_submit_button("Submit Attendance to Google Sheet")
-                
+
                 if submit_btn:
                     now_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     payload = []
@@ -176,15 +208,16 @@ else:
                             "StudentName": str(student),
                             "Status": "Present" if is_present else "Absent"
                         })
-                    
+
                     try:
-                        response = requests.post(SCRIPT_URL, data=json.dumps(payload))
+                        response = requests.post(SCRIPT_URL, data=json.dumps(payload), timeout=10)
                         if response.status_code == 200:
                             st.success("🎉 Attendance logged successfully into your Google Sheet!")
                         else:
                             st.error(f"Spreadsheet error (Status Code: {response.status_code})")
                     except Exception as e:
                         st.error("Connection Error: Check your Apps Script Link configuration.")
+
         else:
             st.warning("No students listed under this batch name yet.")
 
@@ -192,24 +225,24 @@ else:
     elif menu == "Admin Sheet Link":
         st.header("Admin Management")
         st.write("As an Admin, click below to add new students, update teacher passwords, or add batches:")
-        st.markdown(f"[👉 Open Google Spreadsheet Database](https://google.com{SHEET_ID}/edit)")
+        st.markdown(f"[👉 Open Google Spreadsheet Database](https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit)")
 
     # --- ANALYTICS ---
     elif menu == "Absenteeism Analytics":
         st.header("🔍 Search Absenteeism History")
         log_data = load_data(GID_LOG)
-        
+
         if not log_data.empty:
             if 'student_name' in log_data.columns:
                 search_name = st.selectbox("Select Student to Check", log_data['student_name'].unique())
-                
+
                 st.write("Filter Date Range:")
                 start_dt = st.date_input("Start Date", datetime.date(2026, 4, 1))
                 end_dt = st.date_input("End Date", datetime.date(2026, 5, 31))
-                
+
                 log_data['date'] = pd.to_datetime(log_data['date']).dt.date
                 history = log_data[(log_data['student_name'] == search_name) & (log_data['date'] >= start_dt) & (log_data['date'] <= end_dt)]
-                
+
                 st.subheader(f"History for {search_name}")
                 if not history.empty:
                     st.dataframe(history)
