@@ -1,4 +1,4 @@
-# streamlit_app_improved.py
+# streamlit_app_safe_rerun.py
 import streamlit as st
 import pandas as pd
 import datetime
@@ -16,6 +16,26 @@ SCRIPT_URL = "https://script.google.com/macros/s/your-script-id/exec"  # <-- rep
 GID_USERS = "1184024919"
 GID_STUDENTS = "0"
 GID_LOG = "761431643"
+
+# --- SAFE RERUN HELPER ---
+def safe_rerun():
+    """
+    Try to call Streamlit's experimental rerun. If missing, fall back to toggling
+    a query param or setting a session_state marker to force a rerun-like refresh.
+    """
+    try:
+        st.experimental_rerun()
+    except Exception:
+        # Fallback 1: try query params
+        try:
+            params = st.experimental_get_query_params()
+            params["_rerun_ts"] = int(time.time())
+            st.experimental_set_query_params(**params)
+            return
+        except Exception:
+            # Fallback 2: set a session_state marker
+            st.session_state["_force_rerun_marker"] = int(time.time())
+            return
 
 # --- NETWORK HELPERS ---
 def build_sheet_export_url(sheet_id: str, gid_number: str) -> str:
@@ -69,7 +89,6 @@ def slugify_key(s: str) -> str:
     s = s.strip().lower()
     s = re.sub(r'\s+', '_', s)
     s = re.sub(r'[^0-9a-zA-Z_]', '_', s)
-    # collapse multiple underscores
     s = re.sub(r'_+', '_', s)
     return s or "unknown"
 
@@ -140,7 +159,7 @@ if not st.session_state.logged_in:
                         role_value = "teacher"
 
                     st.session_state.role = str(role_value).strip().lower()
-                    st.experimental_rerun()
+                    safe_rerun()
                 else:
                     st.error("Invalid Email or Password. Please check your credentials in the Google Sheet.")
             else:
@@ -182,7 +201,7 @@ else:
         for k in keys_to_clear:
             del st.session_state[k]
         st.session_state.logged_in = False
-        st.experimental_rerun()
+        safe_rerun()
 
     # Load students
     students_result = fetch_csv_from_sheet(GID_STUDENTS)
@@ -237,12 +256,12 @@ else:
                 if st.button("✅ Mark All Present"):
                     for name, key in name_to_key.items():
                         st.session_state[f"check_{key}"] = True
-                    st.experimental_rerun()
+                    safe_rerun()
             with col_b2:
                 if st.button("❌ Mark All Absent"):
                     for name, key in name_to_key.items():
                         st.session_state[f"check_{key}"] = False
-                    st.experimental_rerun()
+                    safe_rerun()
 
             st.write("---")
 
@@ -329,7 +348,6 @@ else:
                 try:
                     log_data['date'] = pd.to_datetime(log_data['date']).dt.date
                 except Exception:
-                    # if parsing fails, leave as-is and warn
                     st.warning("Could not parse date column in log; ensure it is in a standard date format.")
             history = log_data[(log_data['student_name'] == search_name) & (log_data['date'] >= start_dt) & (log_data['date'] <= end_dt)]
 
