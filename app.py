@@ -5,9 +5,8 @@ import requests
 import json
 
 # --- CONFIGURATION ---
-# 🚨 FIXED: Your exact public published ID taken directly from your 2PACX link
 PUBLISHED_ID = "2PACX-1vRD_DZFeFRkKopWC7TQ3jQqLc_BzTIvlWrg1dwK9ZyKAiQLTDkWmMNvxn-sEoG1LytmWznR1pVtcM2P"
-SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzAYdOR46YpS2_LFs9RVIc7dUoK1cwxeZ0Ql0bjhQmMBNorU9UhCM3O1o6WxtJGRv91PA/exec"
+SCRIPT_URL = "https://google.com"
 
 # YOUR VERIFIED TAB GID NUMBERS
 GID_USERS = "1184024919"
@@ -16,8 +15,7 @@ GID_LOG = "761431643"
 
 def load_data(gid_number):
     try:
-        # Strict URL routing matching Google's published spreadsheet structure
-        url = f"https://docs.google.com/spreadsheets/d/e/{PUBLISHED_ID}/pub?output=csv&gid={gid_number}"
+        url = f"https://google.com{PUBLISHED_ID}/pub?output=csv&gid={gid_number}"
         df = pd.read_csv(url)
         df.columns = df.columns.astype(str).str.strip().str.lower()
         return df
@@ -55,30 +53,14 @@ if not st.session_state.logged_in:
                 if not user_row.empty:
                     st.session_state.logged_in = True
                     st.session_state.email = email_input.strip()
-                    
-                    # Safe extraction of textual data arrays
-                    st.session_state.role = str(user_row['role'].values[0]).strip()
+                    st.session_state.role = str(user_row['role'].values).strip()
                     st.rerun()
                 else:
                     st.error("Invalid Email or Password. Please check your credentials in the Google Sheet.")
             else:
                 st.error(f"Column mismatch! Found headers: {list(users_df.columns)}. Expected: email, password, role")
         else:
-            st.error("Could not download User account database. Please ensure all tabs are published individually to the web.")
-
-    # --- CONNECTION DEBUG PANEL ---
-    st.write("---")
-    with st.expander("🛠️ Connection Debug Panel"):
-        st.write("Testing clean target connection to your published 'Users' sheet tab...")
-        test_df = load_data(GID_USERS)
-        if not test_df.empty:
-            st.success("✅ Connection Fixed! Streamlit can isolate your proper 'Users' tab layout.")
-            st.write("Headers found inside this specific tab:")
-            st.code(list(test_df.columns))
-            if 'email' in test_df.columns:
-                st.dataframe(test_df[['email', 'role']].head(3))
-        else:
-            st.error("❌ Link connection pending. Please verify your individual tab publishing status.")
+            st.error("Could not download User account database. Please try clicking Log In again in a moment.")
 
 else:
     # --- LOGGED IN APP ---
@@ -121,11 +103,31 @@ else:
             filtered_students = []
 
         if filtered_students:
+            # 🆕 MECHANISM 1: "SELECT ALL / UNSELECT ALL" MASTER SWITCH
+            select_all = st.checkbox("Toggle All Students (Check to select everyone as Present)", value=True)
+            
+            st.write("---")
+            
             with st.form("attendance_form"):
                 attendance_states = {}
-                for student in filtered_students:
-                    attendance_states[student] = st.checkbox(student, value=True)
                 
+                # Render student rows cleanly
+                for student in filtered_students:
+                    # Create two side-by-side columns: left for input checkbox, right for text status badge
+                    left_col, right_col = st.columns([3, 1])
+                    
+                    with left_col:
+                        # Link checkbox value directly to the master "select_all" checkbox state
+                        attendance_states[student] = st.checkbox(student, value=select_all)
+                    
+                    with right_col:
+                        # 🆕 MECHANISM 2: VISIBLE PRESENT/ABSENT VISUAL STATUS BADGE
+                        if attendance_states[student]:
+                            st.markdown("<span style='color:green; font-weight:bold; background-color:#e6f4ea; padding:4px 8px; border-radius:4px;'>🟢 PRESENT</span>", unsafe_allow_html=True)
+                        else:
+                            st.markdown("<span style='color:red; font-weight:bold; background-color:#fce8e6; padding:4px 8px; border-radius:4px;'>🔴 ABSENT</span>", unsafe_allow_html=True)
+                
+                st.write("")
                 submit_btn = st.form_submit_button("Submit Attendance to Google Sheet")
                 
                 if submit_btn:
@@ -157,7 +159,7 @@ else:
     elif menu == "Admin Sheet Link":
         st.header("Admin Management")
         st.write("As an Admin, click below to add new students, update teacher passwords, or add batches:")
-        st.markdown("f\"[👉 Open Google Spreadsheet Database](https://google.com)\"")
+        st.markdown(f"[👉 Open Google Spreadsheet Database](https://google.com{SHEET_ID}/edit)")
 
     # --- ANALYTICS ---
     elif menu == "Absenteeism Analytics":
