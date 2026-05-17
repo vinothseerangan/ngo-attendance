@@ -1,36 +1,27 @@
 import streamlit as st
+from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import datetime
 import requests
 import json
-from io import StringIO
 
-# --- CONFIGURATION ---
-SHEET_ID = "1p8GUD8x3CIy4X5u2t-TDCHPkqoGCn4DgCYTtiWq75E8"
-SCRIPT_URL = "https://google.com"
+st.set_page_config(page_title="NGO Attendance Portal", page_icon="📝")
+st.title("📝 PLAN B: Certified Attendance Portal")
 
-GID_USERS = "1184024919"
-GID_STUDENTS = "0"
-GID_LOG = "761431643"
+# --- CERTIFIED NATIVE CONNECTION SETUP ---
+try:
+    conn = st.connection("gsheets", type=GSheetsConnection)
+except Exception as e:
+    st.error("Secrets initialization error. Please verify your .streamlit/secrets.toml path configuration.")
+    st.stop()
 
-def load_data(gid_number):
-    # 🔒 FIXED LINK STRUCUTRE TYPO HERE:
-    url = f"https://google.com{SHEET_ID}/export?format=csv&gid={gid_number}"
+def load_data_by_tab(tab_name):
     try:
-        response = requests.get(url, timeout=10)
-        
-        st.session_state[f"status_code_{gid_number}"] = response.status_code
-        st.session_state[f"response_text_{gid_number}"] = response.text[:500] 
-        
-        if response.status_code == 200:
-            df = pd.read_csv(StringIO(response.text))
-            df.columns = df.columns.astype(str).str.strip().str.lower()
-            return df
-        else:
-            return pd.DataFrame()
+        # Pulls live rows using official developer handshake tokens
+        df = conn.read(worksheet=tab_name, ttl="0s")
+        df.columns = df.columns.astype(str).str.strip().str.lower()
+        return df
     except Exception as e:
-        st.session_state[f"status_code_{gid_number}"] = "CRASHED"
-        st.session_state[f"response_text_{gid_number}"] = str(e)
         return pd.DataFrame()
 
 # Initialize Session States
@@ -41,9 +32,6 @@ if "email" not in st.session_state:
 if "role" not in st.session_state:
     st.session_state.role = ""
 
-st.set_page_config(page_title="NGO Attendance Portal", page_icon="📝")
-st.title("📝 NGO Attendance Portal")
-
 # --- LOGIN INTERFACE ---
 if not st.session_state.logged_in:
     st.subheader("Login")
@@ -51,7 +39,8 @@ if not st.session_state.logged_in:
     password_input = st.text_input("Password", type="password")
     
     if st.button("Log In"):
-        users_df = load_data(GID_USERS)
+        # Explicit target download by Tab Name string
+        users_df = load_data_by_tab("Users")
         if not users_df.empty:
             clean_email = email_input.strip().lower()
             clean_pwd = password_input.strip()
@@ -64,32 +53,29 @@ if not st.session_state.logged_in:
                 if not user_row.empty:
                     st.session_state.logged_in = True
                     st.session_state.email = email_input.strip()
-                    st.session_state.role = str(user_row['role'].values[0]).strip().lower() if len(user_row) > 0 else "teacher"
+                    st.session_state.role = str(user_row['role'].values).strip().lower() if len(user_row) > 0 else "teacher"
+                    st.cache_data.clear()
                     st.rerun()
                 else:
                     st.error("Invalid Email or Password. Please check your credentials in the Google Sheet.")
             else:
-                st.error(f"Column mismatch! Expected: email, password, role")
+                st.error(f"Column mismatch! Found headers: {list(users_df.columns)}. Expected: email, password, role")
         else:
             st.error("Connection lag detected. Please inspect the Live Debugger Box below.")
 
-    # --- LIVE NETWORK DEBUGGER PANEL ---
+    # --- PLAN B AUTOMATED NETWORK DEBUGGER ---
     st.write("---")
-    with st.expander("🛠️ Connection Debug Panel"):
-        st.write("Testing clean target connection to your 'Users' sheet tab...")
-        test_df = load_data(GID_USERS)
+    with st.expander("🛠️ Plan B Connection Debug Panel"):
+        st.write("Verifying native Google Cloud connection pipeline status...")
+        test_df = load_data_by_tab("Users")
         if not test_df.empty:
-            st.success("✅ Connection Successful! Streamlit can isolate your proper 'Users' tab layout.")
-            st.write("Headers found inside this specific tab:")
+            st.success("✅ Connection Successful! Streamlit has securely parsed your 'Users' worksheet.")
+            st.write("Headers found inside your tab:")
             st.code(list(test_df.columns))
             if 'email' in test_df.columns:
                 st.dataframe(test_df[['email', 'role']].head(3))
         else:
-            st.error("❌ Link connection pending. Click the diagnostics button below to re-verify.")
-        
-        if st.button("🔍 Run Live Connection Diagnostics"):
-            st.metric(label="Google Server Status Code", value=str(st.session_state.get(f"status_code_{GID_USERS}", "No data")))
-            st.code(st.session_state.get(f"response_text_{GID_USERS}", "Empty response"))
+            st.error("❌ Link connection pending. Please confirm that your Google Sheet general sharing settings are set to 'Anyone with link can Edit'.")
 
 else:
     # --- LOGGED IN APP ---
@@ -100,7 +86,8 @@ else:
         st.session_state.role = ""
         st.rerun()
 
-    students_df = load_data(GID_STUDENTS)
+    students_df = load_data_by_tab("Students")
+    SCRIPT_URL = "https://google.com"
 
     if "admin" in st.session_state.role.lower():
         menu = st.sidebar.selectbox("Navigation", ["Take Attendance", "Admin Sheet Link", "Absenteeism Analytics"])
@@ -192,12 +179,12 @@ else:
     elif menu == "Admin Sheet Link":
         st.header("Admin Management")
         st.write("As an Admin, click below to add new students, update teacher passwords, or add batches:")
-        st.markdown(f"[👉 Open Google Spreadsheet Database](https://google.com{SHEET_ID}/edit)")
+        st.markdown("f\"[👉 Open Google Spreadsheet Database](https://google.com)\"")
 
     # --- ANALYTICS ---
     elif menu == "Absenteeism Analytics":
         st.header("🔍 Search Absenteeism History")
-        log_data = load_data(GID_LOG)
+        log_data = load_data_by_tab("Attendance_Log")
         
         if not log_data.empty:
             if 'student_name' in log_data.columns:
