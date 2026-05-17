@@ -5,7 +5,6 @@ import requests
 import json
 
 # --- CONFIGURATION ---
-# Your exact public published ID taken directly from your 2PACX link
 PUBLISHED_ID = "2PACX-1vRD_DZFeFRkKopWC7TQ3jQqLc_BzTIvlWrg1dwK9ZyKAiQLTDkWmMNvxn-sEoG1LytmWznR1pVtcM2P"
 SCRIPT_URL = "https://google.com"
 
@@ -16,8 +15,7 @@ GID_LOG = "761431643"
 
 def load_data(gid_number):
     try:
-        # Strict URL parameters matching Google's web deployment schema
-        url = f"https://google.com{PUBLISHED_ID}/pub?output=csv&gid={gid_number}"
+        url = f"https://docs.google.com/spreadsheets/d/e/{PUBLISHED_ID}/pub?output=csv&gid={gid_number}"
         df = pd.read_csv(url)
         df.columns = df.columns.astype(str).str.strip().str.lower()
         return df
@@ -56,7 +54,7 @@ if not st.session_state.logged_in:
                     st.session_state.logged_in = True
                     st.session_state.email = email_input.strip()
                     
-                    # Safe extraction of categorical cell properties
+                    # 🔍 FIXED PERMANENT STRING CONTEXT FORMATTING
                     st.session_state.role = str(user_row['role'].values[0]).strip()
                     st.rerun()
                 else:
@@ -64,7 +62,7 @@ if not st.session_state.logged_in:
             else:
                 st.error(f"Column mismatch! Found headers: {list(users_df.columns)}. Expected: email, password, role")
         else:
-            st.error("Could not download User account database. Please verify Step 1 configuration instructions.")
+            st.error("Could not download User account database. Please ensure your 'Users' tab is published.")
 
     # --- CONNECTION DEBUG PANEL ---
     st.write("---")
@@ -72,7 +70,7 @@ if not st.session_state.logged_in:
         st.write("Testing clean target connection to your published 'Users' sheet tab...")
         test_df = load_data(GID_USERS)
         if not test_df.empty:
-            st.success("✅ Connection Successful! Streamlit can isolate your proper 'Users' tab layout.")
+            st.success("✅ Connection Fixed! Streamlit can isolate your proper 'Users' tab layout.")
             st.write("Headers found inside this specific tab:")
             st.code(list(test_df.columns))
             if 'email' in test_df.columns:
