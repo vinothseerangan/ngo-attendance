@@ -15,7 +15,7 @@ GID_LOG = "761431643"
 
 def load_data(gid_number):
     try:
-        url = f"https://docs.google.com/spreadsheets/d/e/{PUBLISHED_ID}/pub?output=csv&gid={gid_number}"
+        url = f"https://google.com{PUBLISHED_ID}/pub?output=csv&gid={gid_number}"
         df = pd.read_csv(url)
         df.columns = df.columns.astype(str).str.strip().str.lower()
         return df
@@ -53,8 +53,6 @@ if not st.session_state.logged_in:
                 if not user_row.empty:
                     st.session_state.logged_in = True
                     st.session_state.email = email_input.strip()
-                    
-                    # 🔍 FIXED PERMANENT STRING CONTEXT FORMATTING
                     st.session_state.role = str(user_row['role'].values[0]).strip()
                     st.rerun()
                 else:
@@ -119,15 +117,33 @@ else:
             filtered_students = []
 
         if filtered_students:
-            select_all = st.checkbox("Toggle All Students (Check to select everyone as Present)", value=True)
+            # 🆕 MASTER OVERRIDE CONTROLS (Placed cleanly inside session memory)
+            col_b1, col_b2 = st.columns(2)
+            with col_b1:
+                if st.button("✅ Mark All Present"):
+                    for s in filtered_students:
+                        st.session_state[f"check_{s}"] = True
+            with col_b2:
+                if st.button("❌ Mark All Absent"):
+                    for s in filtered_students:
+                        st.session_state[f"check_{s}"] = False
+
             st.write("---")
             
+            # Form submission housing the individual student nodes
             with st.form("attendance_form"):
                 attendance_states = {}
+                
                 for student in filtered_students:
+                    # Failsafe initialization of keys
+                    key_name = f"check_{student}"
+                    if key_name not in st.session_state:
+                        st.session_state[key_name] = True
+                    
                     left_col, right_col = st.columns(2)
                     with left_col:
-                        attendance_states[student] = st.checkbox(student, value=select_all)
+                        # 🔒 FIXED BUG: Checking individual checkbox binds strictly to its unique state key
+                        attendance_states[student] = st.checkbox(student, key=key_name)
                     with right_col:
                         if attendance_states[student]:
                             st.markdown("<span style='color:green; font-weight:bold; background-color:#e6f4ea; padding:4px 8px; border-radius:4px;'>🟢 PRESENT</span>", unsafe_allow_html=True)
