@@ -8,22 +8,20 @@ import json
 SHEET_ID = "1p8GUD8x3CIy4X5u2t-TDCHPkqoGCn4DgCYTtiWq75E8"
 SCRIPT_URL = "https://google.com"
 
-def load_data_by_position(tab_index):
+# PLUGGED IN YOUR EXACT TAB GID NUMBERS
+GID_USERS = "1184024919"
+GID_STUDENTS = "0"
+GID_LOG = "761431643"
+
+def load_data(gid_number):
     try:
-        # Pulls data by sheet index position (0 = 1st tab, 1 = 2nd tab, 2 = 3rd tab)
-        url = f"https://google.com{SHEET_ID}/export?format=csv&id={SHEET_ID}&sheetindex={tab_index}"
+        # Strict URL targeting using your exact tab GID numbers
+        url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={gid_number}"
         df = pd.read_csv(url)
         df.columns = df.columns.astype(str).str.strip().str.lower()
         return df
     except Exception as e:
-        # Fallback method if indexing link acts up
-        try:
-            url = f"https://google.com{SHEET_ID}/export?format=csv"
-            df = pd.read_csv(url)
-            df.columns = df.columns.astype(str).str.strip().str.lower()
-            return df
-        except:
-            return pd.DataFrame()
+        return pd.DataFrame()
 
 # Initialize Session States
 if "logged_in" not in st.session_state:
@@ -43,8 +41,7 @@ if not st.session_state.logged_in:
     password_input = st.text_input("Password", type="password")
     
     if st.button("Log In"):
-        # Index 0 reads the 1st tab (Users)
-        users_df = load_data_by_position(0)
+        users_df = load_data(GID_USERS)
         if not users_df.empty:
             clean_email = email_input.strip().lower()
             clean_pwd = password_input.strip()
@@ -64,21 +61,21 @@ if not st.session_state.logged_in:
             else:
                 st.error(f"Column mismatch! Found headers: {list(users_df.columns)}. Expected: email, password, role")
         else:
-            st.error("Could not fetch user data. Please ensure your 'Users' tab is in the 1st position on the far left.")
+            st.error("Could not process account authorization rules. Check your GID numbers.")
 
     # --- CONNECTION DEBUG PANEL ---
     st.write("---")
     with st.expander("🛠️ Connection Debug Panel"):
-        st.write("Reading the 1st tab on the far left of your Google Sheet...")
-        test_df = load_data_by_position(0)
+        st.write("Testing clean target connection to your 'Users' sheet tab...")
+        test_df = load_data(GID_USERS)
         if not test_df.empty:
-            st.success("✅ Connection Successful!")
-            st.write("Headers found inside the 1st tab:")
+            st.success("✅ Connection Fixed! Streamlit can isolate your proper 'Users' tab layout.")
+            st.write("Headers found inside this specific tab:")
             st.code(list(test_df.columns))
             if 'email' in test_df.columns:
                 st.dataframe(test_df[['email', 'role']].head(3))
         else:
-            st.error("❌ Data pull failed. Make sure your Google Sheet sharing settings allow access.")
+            st.error("❌ Link connection pending. Please verify your tab GID numbers on Lines 12-14 match your sheets.")
 
 else:
     # --- LOGGED IN APP ---
@@ -89,8 +86,7 @@ else:
         st.session_state.role = ""
         st.rerun()
 
-    # Index 1 reads the 2nd tab (Students)
-    students_df = load_data_by_position(1)
+    students_df = load_data(GID_STUDENTS)
 
     if st.session_state.role.lower() == "admin":
         menu = st.sidebar.selectbox("Navigation", ["Take Attendance", "Admin Sheet Link", "Absenteeism Analytics"])
@@ -158,13 +154,12 @@ else:
     elif menu == "Admin Sheet Link":
         st.header("Admin Management")
         st.write("As an Admin, click below to add new students, update teacher passwords, or add batches:")
-        st.markdown(f"[👉 Open Google Spreadsheet Database](https://google.com{SHEET_ID}/edit)")
+        st.markdown(f"[👉 Open Google Spreadsheet Database](https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit)")
 
     # --- ANALYTICS ---
     elif menu == "Absenteeism Analytics":
         st.header("🔍 Search Absenteeism History")
-        # Index 2 reads the 3rd tab (Attendance_Log)
-        log_data = load_data_by_position(2)
+        log_data = load_data(GID_LOG)
         
         if not log_data.empty:
             if 'student_name' in log_data.columns:
