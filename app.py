@@ -3,10 +3,10 @@ import pandas as pd
 import datetime
 import requests
 import json
-import time
 
 # --- CONFIGURATION ---
-PUBLISHED_ID = "2PACX-1vRD_DZFeFRkKopWC7TQ3jQqLc_BzTIvlWrg1dwK9ZyKAiQLTDkWmMNvxn-sEoG1LytmWznR1pVtcM2P"
+# 🔒 FIXED PERMANENT STRUCTURAL DATA LINK
+SHEET_ID = "1p8GUD8x3CIy4X5u2t-TDCHPkqoGCn4DgCYTtiWq75E8"
 SCRIPT_URL = "https://google.com"
 
 # YOUR VERIFIED TAB GID NUMBERS
@@ -14,13 +14,10 @@ GID_USERS = "1184024919"
 GID_STUDENTS = "0"
 GID_LOG = "761431643"
 
-# 🔒 FIXED BYPASS: ttl=0 tells Streamlit never to store this data in frozen memory
-@st.cache_data(ttl=0)
 def load_data(gid_number):
     try:
-        # BUSTING THE CACHE WALL: Adding a live timestamp forces a fresh download from Google every second
-        nocache_timestamp = int(time.time())
-        url = f"https://google.com{PUBLISHED_ID}/pub?output=csv&gid={gid_number}&cb={nocache_timestamp}"
+        # BULLETPROOF OPEN EXPORT GATEWAY (Bypasses web publication locks completely)
+        url = f"https://google.com{SHEET_ID}/export?format=csv&gid={gid_number}"
         df = pd.read_csv(url)
         df.columns = df.columns.astype(str).str.strip().str.lower()
         return df
@@ -58,8 +55,9 @@ if not st.session_state.logged_in:
                 if not user_row.empty:
                     st.session_state.logged_in = True
                     st.session_state.email = email_input.strip()
-                    # Fixed list output extraction bug
-                    st.session_state.role = str(user_row['role'].values[0]).strip().lower() 
+                    
+                    # Safe extraction of textual strings from rows
+                    st.session_state.role = str(user_row['role'].values[0]).strip().lower() if len(user_row) > 0 else "teacher"
                     st.rerun()
                 else:
                     st.error("Invalid Email or Password. Please check your credentials in the Google Sheet.")
@@ -71,11 +69,11 @@ if not st.session_state.logged_in:
     # --- CONNECTION DEBUG PANEL ---
     st.write("---")
     with st.expander("🛠️ Connection Debug Panel (Check Status Live)"):
-        st.write("Fetching direct data package streams...")
+        st.write("Fetching direct data package streams from primary database link...")
         test_df = load_data(GID_USERS)
         if not test_df.empty:
-            st.success("✅ Connection Successful! Tab isolated.")
-            st.write("Headers found inside this specific tab:")
+            st.success("✅ Connection Successful! Isolate complete.")
+            st.write("Headers found inside your 'Users' tab:")
             st.code(list(test_df.columns))
             if 'email' in test_df.columns:
                 st.dataframe(test_df[['email', 'role']].head(3))
@@ -89,12 +87,11 @@ else:
         st.session_state.logged_in = False
         st.session_state.email = ""
         st.session_state.role = ""
-        st.cache_data.clear() # Clears session cache completely on logout
         st.rerun()
 
     students_df = load_data(GID_STUDENTS)
 
-    if st.session_state.role.lower() == "admin" or "admin" in st.session_state.role:
+    if "admin" in st.session_state.role.lower():
         menu = st.sidebar.selectbox("Navigation", ["Take Attendance", "Admin Sheet Link", "Absenteeism Analytics"])
     else:
         menu = "Take Attendance"
@@ -145,7 +142,6 @@ else:
                     
                     left_col, right_col = st.columns(2)
                     with left_col:
-                        # Individual checkboxes bind strictly to session state keys
                         attendance_states[student] = st.checkbox(student, key=key_name)
                     with right_col:
                         if attendance_states[student]:
@@ -185,7 +181,7 @@ else:
     elif menu == "Admin Sheet Link":
         st.header("Admin Management")
         st.write("As an Admin, click below to add new students, update teacher passwords, or add batches:")
-        st.markdown(f"[👉 Open Google Spreadsheet Database](https://google.com)")
+        st.markdown(f"[👉 Open Google Spreadsheet Database](https://google.com{SHEET_ID}/edit)")
 
     # --- ANALYTICS ---
     elif menu == "Absenteeism Analytics":
