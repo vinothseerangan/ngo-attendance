@@ -4,20 +4,26 @@ import datetime
 import requests
 import json
 
-# --- GOOGLE SHEET CONFIGURATION ---
-# Your unique public published ID taken directly from your 2PACX link
-PUBLISHED_ID = "2PACX-1vRD_DZFeFRkKopWC7TQ3jQqLc_BzTIvlWrg1dwK9ZyKAiQLTDkWmMNvxn-sEoG1LytmWznR1pVtcM2P"
+# --- CONFIGURATION ---
+SHEET_ID = "1p8GUD8x3CIy4X5u2t-TDCHPkqoGCn4DgCYTtiWq75E8"
 SCRIPT_URL = "https://google.com"
 
-def load_data(tab_name):
+def load_data_by_position(tab_index):
     try:
-        # BULLETPROOF RE-ROUTING LINK FOR PUBLISHED SHEETS
-        url = f"https://docs.google.com/spreadsheets/d/e/{PUBLISHED_ID}/pub?output=csv&sheet={tab_name}"
+        # Pulls data by sheet index position (0 = 1st tab, 1 = 2nd tab, 2 = 3rd tab)
+        url = f"https://google.com{SHEET_ID}/export?format=csv&id={SHEET_ID}&sheetindex={tab_index}"
         df = pd.read_csv(url)
         df.columns = df.columns.astype(str).str.strip().str.lower()
         return df
     except Exception as e:
-        return pd.DataFrame()
+        # Fallback method if indexing link acts up
+        try:
+            url = f"https://google.com{SHEET_ID}/export?format=csv"
+            df = pd.read_csv(url)
+            df.columns = df.columns.astype(str).str.strip().str.lower()
+            return df
+        except:
+            return pd.DataFrame()
 
 # Initialize Session States
 if "logged_in" not in st.session_state:
@@ -37,7 +43,8 @@ if not st.session_state.logged_in:
     password_input = st.text_input("Password", type="password")
     
     if st.button("Log In"):
-        users_df = load_data("Users")
+        # Index 0 reads the 1st tab (Users)
+        users_df = load_data_by_position(0)
         if not users_df.empty:
             clean_email = email_input.strip().lower()
             clean_pwd = password_input.strip()
@@ -57,21 +64,21 @@ if not st.session_state.logged_in:
             else:
                 st.error(f"Column mismatch! Found headers: {list(users_df.columns)}. Expected: email, password, role")
         else:
-            st.error("Could not parse data from the 'Users' tab. Wait a few seconds and try clicking Log In again.")
+            st.error("Could not fetch user data. Please ensure your 'Users' tab is in the 1st position on the far left.")
 
     # --- CONNECTION DEBUG PANEL ---
     st.write("---")
     with st.expander("🛠️ Connection Debug Panel"):
-        st.write("Testing connection to your published Google Sheet...")
-        test_df = load_data("Users")
+        st.write("Reading the 1st tab on the far left of your Google Sheet...")
+        test_df = load_data_by_position(0)
         if not test_df.empty:
-            st.success("✅ Connection Successful! Streamlit can see your 'Users' tab online.")
-            st.write("Headers found in Row 1:")
+            st.success("✅ Connection Successful!")
+            st.write("Headers found inside the 1st tab:")
             st.code(list(test_df.columns))
-            st.write("Data rows read:")
-            st.dataframe(test_df[['email', 'role']].head(3))
+            if 'email' in test_df.columns:
+                st.dataframe(test_df[['email', 'role']].head(3))
         else:
-            st.error("❌ Link connection pending. Please verify your tab name is spelled exactly 'Users' with no spaces.")
+            st.error("❌ Data pull failed. Make sure your Google Sheet sharing settings allow access.")
 
 else:
     # --- LOGGED IN APP ---
@@ -82,7 +89,8 @@ else:
         st.session_state.role = ""
         st.rerun()
 
-    students_df = load_data("Students")
+    # Index 1 reads the 2nd tab (Students)
+    students_df = load_data_by_position(1)
 
     if st.session_state.role.lower() == "admin":
         menu = st.sidebar.selectbox("Navigation", ["Take Attendance", "Admin Sheet Link", "Absenteeism Analytics"])
@@ -150,12 +158,13 @@ else:
     elif menu == "Admin Sheet Link":
         st.header("Admin Management")
         st.write("As an Admin, click below to add new students, update teacher passwords, or add batches:")
-        st.markdown("f\"[👉 Open Google Spreadsheet Database](https://google.com)\"")
+        st.markdown(f"[👉 Open Google Spreadsheet Database](https://google.com{SHEET_ID}/edit)")
 
     # --- ANALYTICS ---
     elif menu == "Absenteeism Analytics":
         st.header("🔍 Search Absenteeism History")
-        log_data = load_data("Attendance_Log")
+        # Index 2 reads the 3rd tab (Attendance_Log)
+        log_data = load_data_by_position(2)
         
         if not log_data.empty:
             if 'student_name' in log_data.columns:
