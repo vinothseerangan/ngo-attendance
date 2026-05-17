@@ -7,7 +7,7 @@ import json
 # --- CONFIGURATION ---
 # 🚨 FIXED: Your exact public published ID taken directly from your 2PACX link
 PUBLISHED_ID = "2PACX-1vRD_DZFeFRkKopWC7TQ3jQqLc_BzTIvlWrg1dwK9ZyKAiQLTDkWmMNvxn-sEoG1LytmWznR1pVtcM2P"
-SCRIPT_URL = "https://google.com"
+SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzAYdOR46YpS2_LFs9RVIc7dUoK1cwxeZ0Ql0bjhQmMBNorU9UhCM3O1o6WxtJGRv91PA/exec"
 
 # YOUR VERIFIED TAB GID NUMBERS
 GID_USERS = "1184024919"
