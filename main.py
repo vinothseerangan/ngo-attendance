@@ -6,22 +6,22 @@ import json
 from io import StringIO
 
 # --- CONFIGURATION ---
-# Fixed, clean static Sheet ID targeting your spreadsheet directly
-SHEET_ID = "1p8GUD8x3CIy4X5u2t-TDCHPkqoGCn4DgCYTtiWq75E8"
 SCRIPT_URL = "https://google.com"
 
-# Your specific, verified tab GID mapping constraints
 GID_USERS = "1184024919"
 GID_STUDENTS = "0"
 GID_LOG = "761431643"
 
 def load_data(gid_number):
-    # 🔒 FIXED CORRECTED WEB ADRESS PATHWAY STRING
-    url = f"https://google.com{SHEET_ID}/export?format=csv&gid={gid_number}"
     try:
-        response = requests.get(url, timeout=10)
+        # 🔑 SECURE BYPASS: Checking if the dynamic dashboard link is injected
+        if "CORRECT_URL" in st.secrets:
+            url = f"{st.secrets['CORRECT_URL']}&gid={gid_number}"
+        else:
+            # Hardcoded bulletproof emergency fallback link
+            url = f"https://google.com{gid_number}"
         
-        # Save metrics dynamically for our diagnostic expansion window
+        response = requests.get(url, timeout=10)
         st.session_state[f"status_code_{gid_number}"] = response.status_code
         st.session_state[f"response_text_{gid_number}"] = response.text[:500] 
         
@@ -67,7 +67,7 @@ if not st.session_state.logged_in:
                 if not user_row.empty:
                     st.session_state.logged_in = True
                     st.session_state.email = email_input.strip()
-                    st.session_state.role = str(user_row['role'].values[0]).strip().lower() if len(user_row) > 0 else "teacher"
+                    st.session_state.role = str(user_row['role'].values).strip().lower() if len(user_row) > 0 else "teacher"
                     st.rerun()
                 else:
                     st.error("Invalid Email or Password. Please check your credentials in the Google Sheet.")
@@ -76,13 +76,13 @@ if not st.session_state.logged_in:
         else:
             st.error("Connection lag detected. Please inspect the Live Debugger Box below.")
 
-    # --- LIVE NETWORK DEBUGGER PANEL ---
+    # --- CONNECTION DEBUG PANEL ---
     st.write("---")
-    with st.expander("安排 🛠️ Connection Debug Panel"):
+    with st.expander("🛠️ Connection Debug Panel"):
         st.write("Testing clean target connection to your 'Users' sheet tab...")
         test_df = load_data(GID_USERS)
         if not test_df.empty:
-            st.success("✅ Connection Successful! Streamlit can isolate your proper 'Users' tab layout.")
+            st.success("✅ Connection Successful! Isolate complete.")
             st.write("Headers found inside this specific tab:")
             st.code(list(test_df.columns))
             if 'email' in test_df.columns:
@@ -195,7 +195,7 @@ else:
     elif menu == "Admin Sheet Link":
         st.header("Admin Management")
         st.write("As an Admin, click below to add new students, update teacher passwords, or add batches:")
-        st.markdown(f"[👉 Open Google Spreadsheet Database](https://google.com{SHEET_ID}/edit)")
+        st.markdown(f"[👉 Open Google Spreadsheet Database](https://google.com)")
 
     # --- ANALYTICS ---
     elif menu == "Absenteeism Analytics":
