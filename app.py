@@ -10,10 +10,14 @@ SCRIPT_URL = "https://google.com"
 
 def load_data(tab_name):
     try:
-        url = f"https://google.com{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={tab_name}"
-        return pd.read_csv(url)
+        # BULLETPROOF PUBLIC URL EXPORT FORMAT
+        url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&sheet={tab_name}"
+        df = pd.read_csv(url)
+        # Force completely clean lowercase headers to avoid mismatch errors
+        df.columns = df.columns.str.strip().str.lower()
+        return df
     except Exception as e:
-        st.error(f"Error loading {tab_name} data. Make sure sheets are shared as 'Anyone with link can Edit'.")
+        st.error(f"Error loading {tab_name} data. Please ensure 'Publish to the Web' is enabled in your Google Sheet (File > Share > Publish to the Web).")
         return pd.DataFrame()
 
 # Initialize Session States
@@ -36,7 +40,7 @@ if not st.session_state.logged_in:
     if st.button("Log In"):
         users_df = load_data("Users")
         if not users_df.empty:
-            users_df.columns = users_df.columns.str.strip().str.lower()
+            # Match credentials cleanly
             user_row = users_df[(users_df['email'].astype(str) == email_input.strip()) & (users_df['password'].astype(str) == password_input.strip())]
             if not user_row.empty:
                 st.session_state.logged_in = True
@@ -44,9 +48,9 @@ if not st.session_state.logged_in:
                 st.session_state.role = str(user_row.iloc[0]['role']).strip()
                 st.rerun()
             else:
-                st.error("Invalid Email or Password")
+                st.error("Invalid Email or Password. Please check your credentials in the Google Sheet.")
         else:
-            st.error("Could not read your 'Users' tab. Verify headers match exactly: email, password, role")
+            st.error("Could not parse data from the 'Users' tab. Please check your row headers.")
 else:
     # --- LOGGED IN APP ---
     st.sidebar.write(f"Logged in as: **{st.session_state.email}** ({st.session_state.role})")
@@ -57,10 +61,8 @@ else:
         st.rerun()
 
     students_df = load_data("Students")
-    if not students_df.empty:
-        students_df.columns = students_df.columns.str.strip().str.lower()
 
-    # Access control
+    # Access control case-insensitive check
     if st.session_state.role.lower() == "admin":
         menu = st.sidebar.selectbox("Navigation", ["Take Attendance", "Admin Sheet Link", "Absenteeism Analytics"])
     else:
@@ -71,7 +73,7 @@ else:
     if menu == "Take Attendance":
         st.header("Session Setup")
         
-        available_batches = list(students_df['batch'].dropna().unique()) if not students_df.empty else ["Batch A"]
+        available_batches = list(students_df['batch'].dropna().unique()) if not students_df.empty and 'batch' in students_df.columns else ["Batch A"]
         
         col1, col2 = st.columns(2)
         with col1:
@@ -85,7 +87,7 @@ else:
         st.header(f"Roster for {selected_batch}")
 
         if not students_df.empty and 'student_name' in students_df.columns:
-            filtered_students = students_df[students_df['batch'] == selected_batch]['student_name'].tolist()
+            filtered_students = students_df[students_df['batch'].astype(str) == str(selected_batch)]['student_name'].tolist()
         else:
             filtered_students = []
 
@@ -101,7 +103,6 @@ else:
                     now_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     payload = []
                     for student, is_present in attendance_states.items():
-                        # MATCHES YOUR EXACT LOWERCASE SHEET COLUMNS
                         payload.append({
                             "Date": str(selected_date),
                             "Batch": str(selected_batch),
@@ -128,7 +129,7 @@ else:
     elif menu == "Admin Sheet Link":
         st.header("Admin Management")
         st.write("As an Admin, click below to add new students, update teacher passwords, or add batches:")
-        st.markdown(f"[👉 Open Google Spreadsheet Database](https://google.com{SHEET_ID}/edit)")
+        st.markdown(f"[👉 Open Google Spreadsheet Database](https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit)")
 
     # --- ANALYTICS ---
     elif menu == "Absenteeism Analytics":
@@ -136,9 +137,6 @@ else:
         log_data = load_data("Attendance_Log")
         
         if not log_data.empty:
-            log_data.columns = log_data.columns.str.strip().str.lower()
-            
-            # Use 'student_name' directly since it's lowercase now
             if 'student_name' in log_data.columns:
                 search_name = st.selectbox("Select Student to Check", log_data['student_name'].unique())
                 
