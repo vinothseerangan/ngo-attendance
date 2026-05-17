@@ -8,17 +8,28 @@ import json
 SHEET_ID = "1p8GUD8x3CIy4X5u2t-TDCHPkqoGCn4DgCYTtiWq75E8"
 SCRIPT_URL = "https://google.com"
 
-# YOUR VERIFIED TAB GID NUMBERS
+# YOUR EXACT TAB GID NUMBERS
 GID_USERS = "1184024919"
 GID_STUDENTS = "0"
 GID_LOG = "761431643"
 
 def load_data(gid_number):
     try:
-        url = f"https://google.com{SHEET_ID}/export?format=csv&gid={gid_number}"
-        df = pd.read_csv(url)
-        df.columns = df.columns.astype(str).str.strip().str.lower()
-        return df
+        # Strict URL addressing format using target sheet index endpoints
+        url = f"https://google.com{SHEET_ID}/pub?output=csv&gid={gid_number}"
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            # Safely parse text format into data frames
+            from io import StringIO
+            df = pd.read_csv(StringIO(response.text))
+            df.columns = df.columns.astype(str).str.strip().str.lower()
+            return df
+        else:
+            # Fallback string endpoint matching pattern
+            url_alt = f"https://google.com{SHEET_ID}/export?format=csv&gid={gid_number}"
+            df = pd.read_csv(url_alt)
+            df.columns = df.columns.astype(str).str.strip().str.lower()
+            return df
     except Exception as e:
         return pd.DataFrame()
 
@@ -54,10 +65,8 @@ if not st.session_state.logged_in:
                     st.session_state.logged_in = True
                     st.session_state.email = email_input.strip()
                     
-                    # 🔍 FIXED: Safely extracting the text string from the 'role' column row
-                    detected_role = user_row.iloc[0]['role']
-                    st.session_state.role = str(detected_role).strip()
-                    
+                    # Safe cell text assignment structure
+                    st.session_state.role = str(user_row['role'].values[0]).strip()
                     st.rerun()
                 else:
                     st.error("Invalid Email or Password. Please check your credentials in the Google Sheet.")
@@ -78,7 +87,7 @@ if not st.session_state.logged_in:
             if 'email' in test_df.columns:
                 st.dataframe(test_df[['email', 'role']].head(3))
         else:
-            st.error("❌ Link connection pending. Please verify your tab GID numbers on Lines 13-15 match your sheets.")
+            st.error("❌ Link connection pending. Please verify your tab GID numbers or step 1 configuration rules.")
 
 else:
     # --- LOGGED IN APP ---
