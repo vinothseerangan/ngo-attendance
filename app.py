@@ -1,4 +1,4 @@
-# streamlit_app_safe_rerun.py
+# streamlit_app_live_checkboxes.py
 import streamlit as st
 import pandas as pd
 import datetime
@@ -19,21 +19,15 @@ GID_LOG = "761431643"
 
 # --- SAFE RERUN HELPER ---
 def safe_rerun():
-    """
-    Try to call Streamlit's experimental rerun. If missing, fall back to toggling
-    a query param or setting a session_state marker to force a rerun-like refresh.
-    """
     try:
         st.experimental_rerun()
     except Exception:
-        # Fallback 1: try query params
         try:
             params = st.experimental_get_query_params()
             params["_rerun_ts"] = int(time.time())
             st.experimental_set_query_params(**params)
             return
         except Exception:
-            # Fallback 2: set a session_state marker
             st.session_state["_force_rerun_marker"] = int(time.time())
             return
 
@@ -55,13 +49,8 @@ def http_get_with_retries(url: str, timeout: int = 10, retries: int = 2, backoff
                 raise
     raise last_exc
 
-# --- CACHING FOR SHEET READS ---
 @st.cache_data(ttl=300)
 def fetch_csv_from_sheet(gid_number: str) -> Dict:
-    """
-    Returns a dict with keys: df (DataFrame or None), status_code, response_text, url
-    Cached for 5 minutes to reduce repeated calls while developing.
-    """
     url = build_sheet_export_url(SHEET_ID, gid_number)
     try:
         resp = http_get_with_retries(url, timeout=10, retries=2, backoff=1.0)
@@ -69,7 +58,6 @@ def fetch_csv_from_sheet(gid_number: str) -> Dict:
         text_snippet = resp.text[:500]
         if status == 200:
             df = pd.read_csv(StringIO(resp.text))
-            # normalize column names
             df.columns = df.columns.astype(str).str.strip().str.lower()
             return {"df": df, "status_code": status, "response_text": text_snippet, "url": url}
         else:
@@ -79,24 +67,15 @@ def fetch_csv_from_sheet(gid_number: str) -> Dict:
 
 # --- UTILITIES ---
 def slugify_key(s: str) -> str:
-    """
-    Convert a string into a safe session_state key fragment.
-    Keeps letters, numbers and underscores. Lowercase.
-    """
     if s is None:
         return "unknown"
-    s = str(s)
-    s = s.strip().lower()
+    s = str(s).strip().lower()
     s = re.sub(r'\s+', '_', s)
     s = re.sub(r'[^0-9a-zA-Z_]', '_', s)
     s = re.sub(r'_+', '_', s)
     return s or "unknown"
 
 def unique_keys(names):
-    """
-    Given a list of names, return a dict mapping original name -> unique slug key.
-    Handles duplicates by appending an index.
-    """
     counts = {}
     mapping = {}
     for name in names:
@@ -150,7 +129,6 @@ if not st.session_state.logged_in:
                     st.session_state.logged_in = True
                     st.session_state.email = clean_email
 
-                    # Safely extract single role value
                     if 'role' in user_row.columns and len(user_row) > 0:
                         role_value = user_row['role'].iloc[0]
                     else:
@@ -167,7 +145,6 @@ if not st.session_state.logged_in:
         else:
             st.error("Unable to read Users sheet. Open the Connection Debug Panel for details.")
 
-    # --- CONNECTION DEBUG PANEL ---
     st.write("---")
     with st.expander("🛠️ Connection Debug Panel"):
         st.write("Testing connection to your 'Users' sheet tab...")
@@ -188,36 +165,31 @@ if not st.session_state.logged_in:
             st.code(result.get("url", "No URL built yet"))
 
 else:
-    # --- LOGGED IN APP ---
     display_role = st.session_state.role.title() if st.session_state.role else "Teacher"
     st.sidebar.write(f"Logged in as: **{st.session_state.email}** ({display_role})")
 
-    # Debug toggle for admins
     if "admin" in st.session_state.role.lower():
         st.sidebar.checkbox("Debug Mode", value=st.session_state.debug_mode, key="debug_mode")
     if st.sidebar.button("Log Out"):
-        # clear only relevant keys
         keys_to_clear = [k for k in st.session_state.keys() if k.startswith("check_") or k.startswith("debug_url_") or k in ("logged_in","email","role","last_payload")]
         for k in keys_to_clear:
             del st.session_state[k]
         st.session_state.logged_in = False
         safe_rerun()
 
-    # Load students
     students_result = fetch_csv_from_sheet(GID_STUDENTS)
     students_df = students_result["df"]
     st.session_state[f"debug_url_{GID_STUDENTS}"] = students_result["url"]
     st.session_state[f"status_code_{GID_STUDENTS}"] = students_result["status_code"]
     st.session_state[f"response_text_{GID_STUDENTS}"] = students_result["response_text"]
 
-    # Navigation
     if "admin" in st.session_state.role.lower():
         menu = st.sidebar.selectbox("Navigation", ["Take Attendance", "Admin Sheet Link", "Absenteeism Analytics"])
     else:
         menu = "Take Attendance"
         st.sidebar.info("Teacher Panel: Profile edits are locked.")
 
-    # --- TAKE ATTENDANCE ---
+    # --- TAKE ATTENDANCE (LIVE CHECKBOXES, no st.form) ---
     if menu == "Take Attendance":
         st.header("Session Setup")
 
@@ -238,7 +210,6 @@ else:
         st.write("---")
         st.header(f"Roster for {selected_batch}")
 
-        # Build filtered student list
         filtered_students = []
         if not students_df.empty and 'student_name' in students_df.columns and 'batch' in students_df.columns:
             students_df['batch'] = students_df['batch'].astype(str).str.strip()
@@ -247,7 +218,6 @@ else:
             filtered_students = students_df['student_name'].astype(str).tolist()
 
         if filtered_students:
-            # Create unique safe keys for each student
             name_to_key = unique_keys(filtered_students)
 
             # Bulk mark buttons
@@ -265,59 +235,55 @@ else:
 
             st.write("---")
 
-            with st.form("attendance_form"):
-                # Render checkboxes and live badges
+            # Render live checkboxes (outside a form) so toggles update immediately
+            for student in filtered_students:
+                key_fragment = name_to_key[student]
+                key_name = f"check_{key_fragment}"
+                if key_name not in st.session_state:
+                    st.session_state[key_name] = True  # default present
+
+                left_col, right_col = st.columns([3,1])
+                with left_col:
+                    # checkbox returns the current value but we bind it to session_state key
+                    current = st.checkbox(student, value=st.session_state.get(key_name, True), key=key_name)
+                with right_col:
+                    if st.session_state.get(key_name, False):
+                        st.markdown("<div style='text-align:right'><span style='color:green; font-weight:bold; background-color:#e6f4ea; padding:6px 10px; border-radius:6px;'>🟢 PRESENT</span></div>", unsafe_allow_html=True)
+                    else:
+                        st.markdown("<div style='text-align:right'><span style='color:red; font-weight:bold; background-color:#fce8e6; padding:6px 10px; border-radius:6px;'>🔴 ABSENT</span></div>", unsafe_allow_html=True)
+
+            st.write("")
+            # Submit button outside form — reads live session_state values
+            if st.button("Submit Attendance to Google Sheet"):
+                now_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                payload = []
                 for student in filtered_students:
                     key_fragment = name_to_key[student]
-                    key_name = f"check_{key_fragment}"
-                    if key_name not in st.session_state:
-                        st.session_state[key_name] = True  # default present
+                    is_present = st.session_state.get(f"check_{key_fragment}", False)
+                    payload.append({
+                        "Date": str(selected_date),
+                        "Batch": str(selected_batch),
+                        "Teacher": str(selected_teacher),
+                        "Subject": str(selected_subject),
+                        "Timestamp": now_timestamp,
+                        "StudentName": str(student),
+                        "Status": "Present" if is_present else "Absent"
+                    })
 
-                    left_col, right_col = st.columns([3,1])
-                    with left_col:
-                        _ = st.checkbox(student, key=key_name)
-                    with right_col:
-                        if st.session_state.get(key_name, False):
-                            st.markdown("<div style='text-align:right'><span style='color:green; font-weight:bold; background-color:#e6f4ea; padding:6px 10px; border-radius:6px;'>🟢 PRESENT</span></div>", unsafe_allow_html=True)
-                        else:
-                            st.markdown("<div style='text-align:right'><span style='color:red; font-weight:bold; background-color:#fce8e6; padding:6px 10px; border-radius:6px;'>🔴 ABSENT</span></div>", unsafe_allow_html=True)
-
-                st.write("")
-                submit_btn = st.form_submit_button("Submit Attendance to Google Sheet")
-
-                if submit_btn:
-                    now_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    payload = []
-                    for student in filtered_students:
-                        key_fragment = name_to_key[student]
-                        is_present = st.session_state.get(f"check_{key_fragment}", False)
-                        payload.append({
-                            "Date": str(selected_date),
-                            "Batch": str(selected_batch),
-                            "Teacher": str(selected_teacher),
-                            "Subject": str(selected_subject),
-                            "Timestamp": now_timestamp,
-                            "StudentName": str(student),
-                            "Status": "Present" if is_present else "Absent"
-                        })
-
-                    # Save last payload for debug
-                    st.session_state.last_payload = payload
-
-                    # POST to Apps Script
-                    try:
-                        headers = {"Content-Type": "application/json"}
-                        resp = requests.post(SCRIPT_URL, data=json.dumps(payload), headers=headers, timeout=10)
-                        if resp.status_code == 200:
-                            st.success("🎉 Attendance logged successfully into your Google Sheet!")
-                        else:
-                            st.error(f"Spreadsheet error (Status Code: {resp.status_code})")
-                            if st.session_state.debug_mode:
-                                st.code(resp.text[:1000])
-                    except Exception as e:
-                        st.error("Connection Error: Check your Apps Script Link configuration and network.")
+                st.session_state.last_payload = payload
+                try:
+                    headers = {"Content-Type": "application/json"}
+                    resp = requests.post(SCRIPT_URL, data=json.dumps(payload), headers=headers, timeout=10)
+                    if resp.status_code == 200:
+                        st.success("🎉 Attendance logged successfully into your Google Sheet!")
+                    else:
+                        st.error(f"Spreadsheet error (Status Code: {resp.status_code})")
                         if st.session_state.debug_mode:
-                            st.exception(e)
+                            st.code(resp.text[:1000])
+                except Exception as e:
+                    st.error("Connection Error: Check your Apps Script Link configuration and network.")
+                    if st.session_state.debug_mode:
+                        st.exception(e)
 
         else:
             st.warning("No students listed under this batch name yet. Add students to your Students sheet or check the batch name.")
@@ -343,7 +309,6 @@ else:
             start_dt = st.date_input("Start Date", datetime.date(2026, 4, 1))
             end_dt = st.date_input("End Date", datetime.date(2026, 5, 31))
 
-            # try to parse date column robustly
             if 'date' in log_data.columns:
                 try:
                     log_data['date'] = pd.to_datetime(log_data['date']).dt.date
