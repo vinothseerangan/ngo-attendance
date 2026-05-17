@@ -1,4 +1,4 @@
-# streamlit_app.py
+# streamlit_app_fixed.py
 import streamlit as st
 import pandas as pd
 import datetime
@@ -9,8 +9,7 @@ import time
 
 # --- CONFIGURATION ---
 SHEET_ID = "1p8GUD8x3CIy4X5u2t-TDCHPkqoGCn4DgCYTtiWq75E8"
-# Replace with your actual Apps Script web app URL that accepts POSTs
-SCRIPT_URL = "https://script.google.com/macros/s/your-script-id/exec"
+SCRIPT_URL = "https://script.google.com/macros/s/your-script-id/exec"  # replace with your Apps Script URL
 
 GID_USERS = "1184024919"
 GID_STUDENTS = "0"
@@ -18,16 +17,9 @@ GID_LOG = "761431643"
 
 # --- HELPERS ---
 def build_sheet_export_url(sheet_id: str, gid_number: str) -> str:
-    """
-    Construct a proper Google Sheets CSV export URL.
-    """
     return f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid_number}"
 
 def http_get_with_retries(url: str, timeout: int = 10, retries: int = 2, backoff: float = 1.0):
-    """
-    Simple GET with retries for transient network issues.
-    Returns requests.Response or raises the last exception.
-    """
     last_exc = None
     for attempt in range(retries + 1):
         try:
@@ -44,7 +36,6 @@ def http_get_with_retries(url: str, timeout: int = 10, retries: int = 2, backoff
 def load_data(gid_number):
     try:
         url = build_sheet_export_url(SHEET_ID, gid_number)
-        # store the last attempted URL for debugging
         st.session_state[f"url_{gid_number}"] = url
 
         response = http_get_with_retries(url, timeout=10, retries=2, backoff=1.0)
@@ -93,8 +84,17 @@ if not st.session_state.logged_in:
                 user_row = users_df[(users_df['email'] == clean_email) & (users_df['password'] == clean_pwd)]
                 if not user_row.empty:
                     st.session_state.logged_in = True
-                    st.session_state.email = email_input.strip()
-                    st.session_state.role = str(user_row['role'].values).strip().lower() if len(user_row) > 0 else "teacher"
+                    st.session_state.email = clean_email
+
+                    # Safely extract single role value
+                    if 'role' in user_row.columns and len(user_row) > 0:
+                        role_value = user_row['role'].iloc[0]
+                    else:
+                        role_value = "teacher"
+                    if pd.isna(role_value):
+                        role_value = "teacher"
+
+                    st.session_state.role = str(role_value).strip().lower()
                     st.rerun()
                 else:
                     st.error("Invalid Email or Password. Please check your credentials in the Google Sheet.")
@@ -125,7 +125,8 @@ if not st.session_state.logged_in:
 
 else:
     # --- LOGGED IN APP ---
-    st.sidebar.write(f"Logged in as: **{st.session_state.email}** ({st.session_state.role})")
+    display_role = st.session_state.role.title() if st.session_state.role else "Teacher"
+    st.sidebar.write(f"Logged in as: **{st.session_state.email}** ({display_role})")
     if st.sidebar.button("Log Out"):
         st.session_state.logged_in = False
         st.session_state.email = ""
@@ -164,20 +165,22 @@ else:
             filtered_students = []
 
         if filtered_students:
+            # Bulk mark buttons: set session_state keys and rerun to refresh checkboxes
             col_b1, col_b2 = st.columns(2)
             with col_b1:
                 if st.button("✅ Mark All Present"):
                     for s in filtered_students:
                         st.session_state[f"check_{s}"] = True
+                    st.experimental_rerun()
             with col_b2:
                 if st.button("❌ Mark All Absent"):
                     for s in filtered_students:
                         st.session_state[f"check_{s}"] = False
+                    st.experimental_rerun()
 
             st.write("---")
 
             with st.form("attendance_form"):
-                attendance_states = {}
                 for student in filtered_students:
                     key_name = f"check_{student}"
                     if key_name not in st.session_state:
@@ -185,9 +188,10 @@ else:
 
                     left_col, right_col = st.columns(2)
                     with left_col:
-                        attendance_states[student] = st.checkbox(student, key=key_name)
+                        _ = st.checkbox(student, key=key_name)
                     with right_col:
-                        if attendance_states[student]:
+                        # Read live value from session_state so badge updates when user toggles
+                        if st.session_state.get(key_name, False):
                             st.markdown("<span style='color:green; font-weight:bold; background-color:#e6f4ea; padding:4px 8px; border-radius:4px;'>🟢 PRESENT</span>", unsafe_allow_html=True)
                         else:
                             st.markdown("<span style='color:red; font-weight:bold; background-color:#fce8e6; padding:4px 8px; border-radius:4px;'>🔴 ABSENT</span>", unsafe_allow_html=True)
@@ -198,7 +202,8 @@ else:
                 if submit_btn:
                     now_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     payload = []
-                    for student, is_present in attendance_states.items():
+                    for student in filtered_students:
+                        is_present = st.session_state.get(f"check_{student}", False)
                         payload.append({
                             "Date": str(selected_date),
                             "Batch": str(selected_batch),
@@ -217,7 +222,6 @@ else:
                             st.error(f"Spreadsheet error (Status Code: {response.status_code})")
                     except Exception as e:
                         st.error("Connection Error: Check your Apps Script Link configuration.")
-
         else:
             st.warning("No students listed under this batch name yet.")
 
