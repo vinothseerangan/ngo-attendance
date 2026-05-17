@@ -8,7 +8,7 @@ import json
 SHEET_ID = "1p8GUD8x3CIy4X5u2t-TDCHPkqoGCn4DgCYTtiWq75E8"
 SCRIPT_URL = "https://google.com"
 
-# PLUGGED IN YOUR EXACT TAB GID NUMBERS
+# YOUR VERIFIED TAB GID NUMBERS
 GID_USERS = "1184024919"
 GID_STUDENTS = "0"
 GID_LOG = "761431643"
@@ -53,15 +53,18 @@ if not st.session_state.logged_in:
                 if not user_row.empty:
                     st.session_state.logged_in = True
                     st.session_state.email = email_input.strip()
-                    # FIXED THE KEY ERROR ON THIS LINE:
-                    st.session_state.role = str(user_row.iloc[0]['role']).strip()
+                    
+                    # 🔍 FIXED: Safely extracting the text string from the 'role' column row
+                    detected_role = user_row.iloc[0]['role']
+                    st.session_state.role = str(detected_role).strip()
+                    
                     st.rerun()
                 else:
                     st.error("Invalid Email or Password. Please check your credentials in the Google Sheet.")
             else:
                 st.error(f"Column mismatch! Found headers: {list(users_df.columns)}. Expected: email, password, role")
         else:
-            st.error("Could not process account authorization rules. Check your GID numbers.")
+            st.error("Could not download User account database. Please try clicking Log In again in a moment.")
 
     # --- CONNECTION DEBUG PANEL ---
     st.write("---")
@@ -69,13 +72,13 @@ if not st.session_state.logged_in:
         st.write("Testing clean target connection to your 'Users' sheet tab...")
         test_df = load_data(GID_USERS)
         if not test_df.empty:
-            st.success("✅ Connection Fixed! Streamlit can isolate your proper 'Users' tab layout.")
+            st.success("✅ Connection Successful! Streamlit can see your 'Users' tab layout.")
             st.write("Headers found inside this specific tab:")
             st.code(list(test_df.columns))
             if 'email' in test_df.columns:
                 st.dataframe(test_df[['email', 'role']].head(3))
         else:
-            st.error("❌ Link connection pending. Please verify your tab GID numbers on Lines 12-14 match your sheets.")
+            st.error("❌ Link connection pending. Please verify your tab GID numbers on Lines 13-15 match your sheets.")
 
 else:
     # --- LOGGED IN APP ---
