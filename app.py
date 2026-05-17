@@ -58,7 +58,7 @@ else:
 
     students_df = load_data("Students")
     if not students_df.empty:
-        students_df.columns = students_df.columns.str.strip()
+        students_df.columns = students_df.columns.str.strip().str.lower()
 
     # Access control
     if st.session_state.role.lower() == "admin":
@@ -101,6 +101,7 @@ else:
                     now_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     payload = []
                     for student, is_present in attendance_states.items():
+                        # MATCHES YOUR EXACT LOWERCASE SHEET COLUMNS
                         payload.append({
                             "Date": str(selected_date),
                             "Batch": str(selected_batch),
@@ -135,9 +136,9 @@ else:
         log_data = load_data("Attendance_Log")
         
         if not log_data.empty:
-            log_data.columns = log_data.columns.str.strip()
-            log_data.rename(columns={'student_name': 'student_name', 'Student Name': 'student_name'}, inplace=True)
+            log_data.columns = log_data.columns.str.strip().str.lower()
             
+            # Use 'student_name' directly since it's lowercase now
             if 'student_name' in log_data.columns:
                 search_name = st.selectbox("Select Student to Check", log_data['student_name'].unique())
                 
@@ -145,8 +146,8 @@ else:
                 start_dt = st.date_input("Start Date", datetime.date(2026, 4, 1))
                 end_dt = st.date_input("End Date", datetime.date(2026, 5, 31))
                 
-                log_data['Date'] = pd.to_datetime(log_data['Date']).dt.date
-                history = log_data[(log_data['student_name'] == search_name) & (log_data['Date'] >= start_dt) & (log_data['Date'] <= end_dt)]
+                log_data['date'] = pd.to_datetime(log_data['date']).dt.date
+                history = log_data[(log_data['student_name'] == search_name) & (log_data['date'] >= start_dt) & (log_data['date'] <= end_dt)]
                 
                 st.subheader(f"History for {search_name}")
                 if not history.empty:
